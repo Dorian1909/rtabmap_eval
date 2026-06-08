@@ -1,0 +1,96 @@
+# RTAB-Map Evaluation Platform — Default Configuration
+# Copy to configs/user.yaml and modify to match your environment.
+
+# ============================================================
+# RTAB-Map source and build paths
+# ============================================================
+rtabmap:
+  # Git repo containing RTAB-Map core library (corelib/)
+  source_dir: /home/dpx/rtabmap
+  # Git repo containing rtabmap_ros (ROS2 wrapper)
+  ros_source_dir: /home/dpx/catkin_ws/src/rtabmap
+  # colcon build directory (where install/ and build/ live)
+  build_dir: /home/dpx/catkin_ws
+  # Path to rtabmap.db (cleared when --clean is used)
+  db_path: ~/.ros/rtabmap.db
+
+# ============================================================
+# Dataset and ground truth paths
+# ============================================================
+paths:
+  # Root directory containing bag subfolders
+  bag_dir: /home/dpx/merged_bags2
+  # Root directory containing ground truth .tum files
+  gt_dir: /home/dpx/tum_data2/tum_data
+  # ROS2 launch file for SLAM node
+  launch_file: /home/dpx/rtabmap_bag_demo.launch.py
+  # TF trajectory recorder script
+  record_script: /home/dpx/record_tf_trajectory.py
+
+# ============================================================
+# Bag → Ground truth mapping
+# Key = bag folder name under paths.bag_dir
+# Value = GT file prefix under paths.gt_dir (prefix_gt.tum)
+# ============================================================
+bag_mapping:
+  bag_20260527_160436: "05271604"
+  bag_20260527_163821: "05271638"
+  bag_20260527_164108: "05271640"
+  bag_20260527_164443: "05271644"
+  bag_20260527_164810: "05271647"
+  bag_20260527_165435: "05271654"
+  bag_20260527_170516: "05271704"
+  bag_20260527_171004: "05271709"
+  bag_20260527_171537: "05271715"
+  bag_20260527_172146: "05271721"
+  bag_20260527_172930: "05271729"
+
+# ============================================================
+# Evaluation settings
+# ============================================================
+eval:
+  # Number of times to repeat each bag (accounts for non-determinism)
+  runs_per_bag: 3
+  # Seconds to wait for RTAB-Map nodes to be ready after launch
+  startup_wait_s: 10
+  # Seconds to wait after bag playback for RTAB-Map to finish processing
+  shutdown_wait_s: 5
+  # TF recording rate (Hz)
+  record_rate_hz: 20
+  # Maximum wall-clock seconds per bag playback (safety timeout)
+  playback_timeout_s: 600
+
+# ============================================================
+# evo evaluation parameters
+# ============================================================
+evo:
+  # Maximum timestamp difference for trajectory alignment
+  t_max_diff: 0.5
+  # RPE delta (number of frames between pairs)
+  rpe_delta: 1
+  # RPE delta unit: f=frames, d=distance, r=rotations, m=minutes
+  rpe_delta_unit: f
+
+# ============================================================
+# Process cleanup patterns
+# ============================================================
+kill_patterns:
+  - "rtabmap_slam/rtabmap"
+  - "rtabmap_sync/rgbd_sync"
+  - "rtabmap_viz/rtabmap_viz"
+  - "static_transform_publisher"
+  - "foxglove_bridge"
+  - "rviz2"
+  - "nv12_to_bgr"
+  - "odom_to_tf"
+  - "ros2 bag play"
+  - "record_tf_trajectory"
+
+# ============================================================
+# OpenGL / display settings (for headless or WSL2)
+# ============================================================
+env:
+  LIBGL_ALWAYS_SOFTWARE: "1"
+  GALLIUM_DRIVER: "llvmpipe"
+  MESA_GL_VERSION_OVERRIDE: "3.3"
+  MESA_GLSL_VERSION_OVERRIDE: "330"

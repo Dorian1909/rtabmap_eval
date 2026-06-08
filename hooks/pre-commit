@@ -1,0 +1,40 @@
+#!/bin/bash
+# RTAB-Map auto-evaluation pre-commit hook
+#
+# Install:
+#   ln -sf /home/dpx/rtabmap_eval/hooks/pre-commit /home/dpx/rtabmap/.git/hooks/pre-commit
+#
+# Skip:
+#   git commit --no-verify
+#
+# Behavior:
+#   Only triggers when corelib/src/ or rtabmap_ros source files change.
+#   Runs quick evaluation (1 bag × 1 run) and attaches summary to commit.
+
+set -eo pipefail
+
+RTABMAP_EVAL_DIR="/home/dpx/rtabmap_eval"
+
+# Check if corelib or rtabmap_ros sources changed
+CORE_CHANGED=$(git diff --cached --name-only -- corelib/src/ rtabmap_ros/ | head -1)
+if [ -z "$CORE_CHANGED" ]; then
+    exit 0
+fi
+
+echo "[PRE-COMMIT] RTAB-Map source changed, running quick evaluation..."
+
+OUTPUT_DIR="/tmp/rtabmap_precommit_$(date +%Y%m%d_%H%M%S)"
+
+python3 -m rtabmap_eval --quick --skip-build --output "$OUTPUT_DIR" 2>&1 | tail -5
+
+CSV_FILE="$OUTPUT_DIR/results.csv"
+if [ -f "$CSV_FILE" ]; then
+    APE=$(tail -1 "$CSV_FILE" | cut -d',' -f6)
+    echo ""
+    echo "[PRE-COMMIT] Eval done: APE RMSE = ${APE}m"
+    echo "[PRE-COMMIT] Results: $OUTPUT_DIR/results.csv"
+else
+    echo "[PRE-COMMIT] Eval produced no results."
+fi
+
+exit 0
