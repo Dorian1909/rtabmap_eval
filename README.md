@@ -252,6 +252,55 @@ python3 -m rtabmap_eval --config configs/robot_b.yaml
 python3 -m rtabmap_eval.eval_only /tmp/rtabmap_benchmark_xxx/trajectory.tum --gt /path/to/gt.tum
 ```
 
+## Included Scripts
+
+The `scripts/` directory contains all helper scripts needed to run the evaluation. These are referenced from the config file via relative paths and are invoked automatically during benchmarking.
+
+### `scripts/record_tf_trajectory.py`
+
+Records the `map → base_footprint` TF transform as a TUM-format trajectory file. This is SLAM's estimated path — the primary output of each run.
+
+**How it works:** Subscribes to the TF tree at a configurable rate (default 20 Hz), buffers all poses, and writes them to disk on SIGTERM/SIGINT. The benchmark runner starts this alongside RTAB-Map and stops it after bag playback ends.
+
+**Standalone usage:**
+```bash
+python3 scripts/record_tf_trajectory.py [output.tum] [rate_hz]
+```
+
+### `scripts/odom_to_tf.py`
+
+Publishes `odom → base_footprint` TF from the `/odom` topic. Required when your odometry source publishes `nav_msgs/Odometry` but does not publish TF itself (e.g., some wheel odometry drivers).
+
+**Standalone usage:**
+```bash
+ros2 run ... python3 scripts/odom_to_tf.py
+```
+
+### `scripts/nv12_to_bgr.py`
+
+Converts NV12-encoded images to BGR8 for RTAB-Map. Required only if your camera driver publishes NV12 format (common on embedded platforms with hardware encoders). If your camera already publishes BGR8/RGB8, you do not need this script.
+
+**Standalone usage:**
+```bash
+python3 scripts/nv12_to_bgr.py
+```
+
+### `scripts/rtabmap_xfeat_matcher.py`
+
+XFeat descriptor matcher for RTAB-Map's `PyMatcher` interface. Implements Mutual Nearest Neighbor (MNN) matching with cosine similarity threshold (0.82), matching the logic of XFeat's native `match()` method.
+
+**Used when:** `Vis/CorNNType=0` (PyMatcher) instead of the built-in C++ matcher (`CorNNType=9`).
+
+### `scripts/example.launch.py`
+
+Example ROS2 launch file demonstrating the full setup for evaluation. Copy and modify this for your robot — change topic remappings, TF frames, and RTAB-Map parameters as needed.
+
+Key sections to customize:
+- **Topic remappings** — match your bag's RGB, depth, camera_info, and odom topics
+- **Static TF** — adjust `base_footprint → camera_depth_frame` transform for your robot
+- **RTAB-Map parameters** — feature type, PnP settings, loop closure config
+- **Helper scripts** — include `odom_to_tf.py` and `nv12_to_bgr.py` only if needed
+
 ## Platform Compatibility
 
 | Platform | ROS2 Distro | Status |
@@ -275,6 +324,12 @@ rtabmap_eval/
     benchmark.py          Orchestration & reporting
     utils.py              Process management, shell helpers
     eval_only.py          Standalone evaluator for existing trajectories
+  scripts/                Helper scripts (referenced from config)
+    record_tf_trajectory.py   Records map→base_footprint as TUM trajectory
+    odom_to_tf.py             Publishes odom→base_footprint TF from /odom
+    nv12_to_bgr.py            Converts NV12 images to BGR8 (optional)
+    rtabmap_xfeat_matcher.py  XFeat MNN matcher for PyMatcher interface
+    example.launch.py         Example ROS2 launch file (copy and modify)
   configs/
     default.yaml          Default configuration (all fields documented)
   requirements.txt        evo, pyyaml

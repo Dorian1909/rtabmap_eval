@@ -31,10 +31,10 @@ paths:
   bag_dir: /home/dpx/merged_bags2
   # Root directory containing ground truth .tum files
   gt_dir: /home/dpx/tum_data2/tum_data
-  # ROS2 launch file for SLAM node
-  launch_file: /home/dpx/rtabmap_bag_demo.launch.py
-  # TF trajectory recorder script
-  record_script: /home/dpx/record_tf_trajectory.py
+  # ROS2 launch file for SLAM node (relative to repo root, or absolute)
+  launch_file: scripts/example.launch.py
+  # TF trajectory recorder script (included in scripts/)
+  record_script: scripts/record_tf_trajectory.py
 
 # ============================================================
 # Bag → Ground truth mapping

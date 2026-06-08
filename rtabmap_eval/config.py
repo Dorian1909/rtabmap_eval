@@ -24,8 +24,14 @@ def _deep_merge(base: dict, override: dict) -> dict:
 class Config:
     """Evaluation configuration, loaded from YAML with validation."""
 
+    _REPO_ROOT = Path(__file__).parent.parent  # rtabmap_eval/
+
     def __init__(self, data: Dict[str, Any]):
         self._data = data
+
+    @property
+    def _repo_root(self) -> Path:
+        return self._REPO_ROOT
 
     @classmethod
     def from_yaml(cls, path: Optional[Path] = None) -> "Config":
@@ -104,11 +110,17 @@ class Config:
 
     @property
     def launch_file(self) -> Path:
-        return Path(self._data["paths"]["launch_file"])
+        p = Path(self._data["paths"]["launch_file"])
+        if not p.is_absolute():
+            p = self._repo_root / p
+        return p
 
     @property
     def record_script(self) -> Path:
-        return Path(self._data["paths"]["record_script"])
+        p = Path(self._data["paths"]["record_script"])
+        if not p.is_absolute():
+            p = self._repo_root / p
+        return p
 
     @property
     def bag_mapping(self) -> Dict[str, str]:
