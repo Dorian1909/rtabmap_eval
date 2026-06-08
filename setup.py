@@ -12,7 +12,6 @@ setup(
     entry_points={
         "console_scripts": [
             "rtabmap-eval=rtabmap_eval.__main__:main",
-            "rtabmap-eval-only=rtabmap_eval.eval_only:main",
         ],
     },
 )
