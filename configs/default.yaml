@@ -2,6 +2,15 @@
 # Copy to configs/user.yaml and modify to match your environment.
 
 # ============================================================
+# ROS2 environment
+# ============================================================
+ros:
+  # ROS2 distribution name (humble, iron, jazzy, rolling, etc.)
+  distro: humble
+  # Path to ROS2 setup.bash (auto-detected from distro if not set)
+  # setup_bash: /opt/ros/humble/setup.bash
+
+# ============================================================
 # RTAB-Map source and build paths
 # ============================================================
 rtabmap:

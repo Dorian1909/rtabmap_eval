@@ -47,7 +47,7 @@ def run_single_bag(cfg: Config, bag_name: str, run_idx: int,
     env = cfg.env_overrides.copy()
     # Remove LIBGL_ALWAYS_INDIRECT for headless
     env.pop("LIBGL_ALWAYS_INDIRECT", None)
-    src = source_ros_cmd(cfg.build_dir)
+    src = source_ros_cmd(cfg.build_dir, cfg.ros_setup_bash)
 
     # Log directory for this run
     log_dir = output_dir / bag_name / f"run_{run_idx}"

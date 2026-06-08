@@ -65,6 +65,18 @@ class Config:
     # --- Convenience accessors ---
 
     @property
+    def ros_distro(self) -> str:
+        return str(self._data.get("ros", {}).get("distro", "humble"))
+
+    @property
+    def ros_setup_bash(self) -> Path:
+        """Path to ROS2 setup.bash, auto-detected from distro if not configured."""
+        explicit = self._data.get("ros", {}).get("setup_bash")
+        if explicit:
+            return Path(explicit)
+        return Path(f"/opt/ros/{self.ros_distro}/setup.bash")
+
+    @property
     def rtabmap_source(self) -> Path:
         return Path(self._data["rtabmap"]["source_dir"])
 
@@ -152,8 +164,9 @@ class Config:
     def get_ros_source_cmd(self) -> str:
         """Return shell snippet to source ROS2 and the colcon workspace."""
         build = self.build_dir
+        setup = self.ros_setup_bash
         return (
-            f"source /opt/ros/humble/setup.bash && "
+            f"source {setup} && "
             f"source {build}/install/setup.bash"
         )
 

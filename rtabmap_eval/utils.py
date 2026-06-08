@@ -30,9 +30,11 @@ def kill_processes(patterns: List[str], my_pid: int = None):
     time.sleep(2)
 
 
-def source_ros_cmd(build_dir: Path = None) -> str:
+def source_ros_cmd(build_dir: Path = None, ros_setup: Path = None) -> str:
     """Return a shell snippet to source ROS2 + colcon workspace."""
-    cmd = "source /opt/ros/humble/setup.bash"
+    if ros_setup is None:
+        ros_setup = Path("/opt/ros/humble/setup.bash")
+    cmd = f"source {ros_setup}"
     if build_dir:
         cmd += f" && source {build_dir}/install/setup.bash"
     return cmd
