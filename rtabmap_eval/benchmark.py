@@ -41,6 +41,7 @@ def run_benchmark(cfg: Config, bags: List[str], num_runs: int,
 
     # Run all bags
     all_results: List[Dict] = []
+    fail_counts: Dict[str, int] = {}
     total = len(bags) * num_runs
     current = 0
 
@@ -55,37 +56,45 @@ def run_benchmark(cfg: Config, bags: List[str], num_runs: int,
             print(f"  Elapsed: {elapsed:.0f}s")
 
             if traj_file is None:
+                fail_counts[bag_name] = fail_counts.get(bag_name, 0) + 1
                 continue
 
             gt_file = cfg.get_gt_file(bag_name)
             if gt_file is None:
+                # Config issue, not a SLAM failure; skip without counting.
                 continue
 
             metrics = evaluate_trajectory(traj_file, gt_file, cfg)
-            if metrics:
-                result = {
-                    "bag": bag_name,
-                    "run": run_idx,
-                    "run_time_s": round(elapsed, 1),
-                    "traj_file": str(traj_file),
-                    **metrics,
-                }
-                all_results.append(result)
+            if not metrics:
+                fail_counts[bag_name] = fail_counts.get(bag_name, 0) + 1
+                print(f"  [WARN] evo produced no metrics for {bag_name} run {run_idx}")
+                continue
 
-                ape = metrics.get('ape_rmse', -1)
-                rpe_t = metrics.get('rpe_trans_rmse', -1)
-                rpe_r = metrics.get('rpe_rot_rmse', -1)
-                print(f"  APE RMSE: {ape:.4f}m | RPE trans: {rpe_t:.4f}m | RPE rot: {rpe_r:.2f}deg")
+            result = {
+                "bag": bag_name,
+                "run": run_idx,
+                "run_time_s": round(elapsed, 1),
+                "traj_file": str(traj_file),
+                **metrics,
+            }
+            all_results.append(result)
+
+            ape = metrics.get('ape_rmse', -1)
+            rpe_t = metrics.get('rpe_trans_rmse', -1)
+            rpe_r = metrics.get('rpe_rot_rmse', -1)
+            print(f"  APE RMSE: {ape:.4f}m | RPE trans: {rpe_t:.4f}m | RPE rot: {rpe_r:.2f}deg")
 
     if not all_results:
         print("\n[WARN] No valid results collected.")
+        if fail_counts:
+            _print_failures(fail_counts)
         return
 
     # Save CSV
     _save_csv(all_results, output_dir / "results.csv")
 
     # Print summary
-    _print_summary(all_results)
+    _print_summary(all_results, fail_counts)
 
     print(f"\nResults:  {output_dir / 'results.csv'}")
     print(f"Output:   {output_dir}")
@@ -99,7 +108,8 @@ def _save_csv(results: List[Dict], path: Path) -> None:
         writer.writerows(results)
 
 
-def _print_summary(results: List[Dict]) -> None:
+def _print_summary(results: List[Dict],
+                   fail_counts: Optional[Dict[str, int]] = None) -> None:
     print("\n" + "=" * 85)
     print("Evaluation Summary")
     print("=" * 85)
@@ -142,7 +152,20 @@ def _print_summary(results: List[Dict]) -> None:
         orr = _avg(all_rpe_r)
         print(f"{'Overall':<28} {oa:>10.4f} {'':>10} {ot:>11.4f} {orr:>11.2f} {len(results):>5}")
         print(f"{'APE range':<28} {min(all_ape):>10.4f} ~ {max(all_ape):<8.4f}")
+    if fail_counts:
+        _print_failures(fail_counts)
     print("=" * 85)
+
+
+def _print_failures(fail_counts: Dict[str, int]) -> None:
+    total_fails = sum(fail_counts.values())
+    if not total_fails:
+        return
+    detail = "  ".join(
+        f"{b.replace('bag_20260527_', '')}:{n}"
+        for b, n in sorted(fail_counts.items()) if n
+    )
+    print(f"{'Failed runs':<28} {total_fails}  {detail}")
 
 
 def _avg(vals: List[float]) -> float:
