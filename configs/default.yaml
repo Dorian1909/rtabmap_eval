@@ -1,27 +1,13 @@
 # RTAB-Map Evaluation Platform — Default Configuration
 # Copy to configs/user.yaml and modify to match your environment.
 
-# ============================================================
-# ROS2 environment
-# ============================================================
-ros:
-  # ROS2 distribution name (humble, iron, jazzy, rolling, etc.)
-  distro: humble
-  # Path to ROS2 setup.bash (auto-detected from distro if not set)
-  # setup_bash: /opt/ros/humble/setup.bash
+# Note: RTAB-Map must already be built, and ROS2 + colcon workspace must be
+# sourced in the shell that invokes this tool. This tool does not build or
+# source any environment.
 
-# ============================================================
-# RTAB-Map source and build paths
-# ============================================================
-rtabmap:
-  # Git repo containing RTAB-Map core library (corelib/)
-  source_dir: /home/dpx/rtabmap
-  # Git repo containing rtabmap_ros (ROS2 wrapper)
-  ros_source_dir: /home/dpx/catkin_ws/src/rtabmap
-  # colcon build directory (where install/ and build/ live)
-  build_dir: /home/dpx/catkin_ws
-  # Path to rtabmap.db (cleared when --clean is used)
-  db_path: ~/.ros/rtabmap.db
+# Path to rtabmap.db. Deleted before each run when --clean is used.
+# Override only if your RTAB-Map launch uses a non-default db path.
+db_path: ~/.ros/rtabmap.db
 
 # ============================================================
 # Dataset and ground truth paths
@@ -31,10 +17,12 @@ paths:
   bag_dir: /home/dpx/merged_bags2
   # Root directory containing ground truth .tum files
   gt_dir: /home/dpx/tum_data2/tum_data
-  # ROS2 launch file for SLAM node (relative to repo root, or absolute)
-  launch_file: scripts/example.launch.py
-  # TF trajectory recorder script (included in scripts/)
-  record_script: scripts/record_tf_trajectory.py
+  # User-provided RTAB-Map launch command line. Supports arbitrary launch
+  # arguments. Use absolute paths to be safe from any cwd.
+  # MUST be overridden in user.yaml — REPLACE_ME is a placeholder that fails
+  # validation.
+  # Example: "ros2 launch /abs/path/to/your_rtabmap.launch.py localization:=true"
+  launch_cmd: REPLACE_ME
 
 # ============================================================
 # Bag → Ground truth mapping
@@ -70,6 +58,35 @@ eval:
   playback_timeout_s: 600
 
 # ============================================================
+# eval.launch.py configuration (robot-specific)
+# These fields are passed as launch arguments to eval.launch.py.
+# Override in user.yaml to match your robot.
+# ============================================================
+eval_launch:
+  # Static TF: parent → child (camera_depth_frame is optical convention:
+  # X-right, Y-down, Z-forward; base_footprint is robot frame: X-forward,
+  # Y-left, Z-up). Set enable_static_tf: false if your robot launch already
+  # publishes this TF.
+  static_tf:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+    roll: -1.5708
+    pitch: 0.0
+    yaw: -1.544
+    parent: base_footprint
+    child: camera_depth_frame
+  # Auxiliary process toggles. Disable ones your robot doesn't need.
+  enable_static_tf: true
+  enable_nv12_to_bgr: true
+  enable_odom_to_tf: true
+  enable_foxglove: true
+  enable_rviz: false
+  enable_rtabmap_viz: false
+  # Delay before starting bag playback (s), lets aux nodes be ready
+  bag_start_delay_s: 3.0
+
+# ============================================================
 # evo evaluation parameters
 # ============================================================
 evo:
@@ -79,21 +96,6 @@ evo:
   rpe_delta: 1
   # RPE delta unit: f=frames, d=distance, r=rotations, m=minutes
   rpe_delta_unit: f
-
-# ============================================================
-# Process cleanup patterns
-# ============================================================
-kill_patterns:
-  - "rtabmap_slam/rtabmap"
-  - "rtabmap_sync/rgbd_sync"
-  - "rtabmap_viz/rtabmap_viz"
-  - "static_transform_publisher"
-  - "foxglove_bridge"
-  - "rviz2"
-  - "nv12_to_bgr"
-  - "odom_to_tf"
-  - "ros2 bag play"
-  - "record_tf_trajectory"
 
 # ============================================================
 # OpenGL / display settings (for headless or WSL2)

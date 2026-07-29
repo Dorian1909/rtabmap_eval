@@ -1,8 +1,7 @@
-"""Benchmark orchestration: coordinate builds, runs, evaluations, and reporting."""
+"""Benchmark orchestration: coordinate runs, evaluations, and reporting."""
 
 import csv
 import json
-import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -10,12 +9,11 @@ from typing import Dict, List, Optional
 
 from .config import Config
 from .evaluator import evaluate_trajectory
-from .runner import build, run_single_bag
-from .utils import kill_processes
+from .runner import run_single_bag
 
 
 def run_benchmark(cfg: Config, bags: List[str], num_runs: int,
-                  skip_build: bool, clean_db: bool,
+                  clean_db: bool,
                   output_dir: Optional[Path] = None) -> None:
     """Run the full benchmark pipeline."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -31,25 +29,12 @@ def run_benchmark(cfg: Config, bags: List[str], num_runs: int,
     print(f"Output:    {output_dir}")
     print()
 
-    # Build
-    if not skip_build:
-        print("[BUILD] Compiling RTAB-Map...")
-        if not build(cfg):
-            print("[ABORT] Build failed.")
-            return
-        print("[BUILD] Done.")
-    else:
-        print("[BUILD] Skipped (--skip-build).")
-
     # Save metadata
     meta = {
         "timestamp": timestamp,
         "bags": bags,
         "num_runs": num_runs,
         "clean_db": clean_db,
-        "skip_build": skip_build,
-        "git_commit": _git_short(cfg.rtabmap_source),
-        "git_branch": _git_branch(cfg.rtabmap_source),
         "config": cfg.to_dict(),
     }
     (output_dir / "meta.json").write_text(json.dumps(meta, indent=2, default=str))
@@ -162,23 +147,3 @@ def _print_summary(results: List[Dict]) -> None:
 
 def _avg(vals: List[float]) -> float:
     return sum(vals) / len(vals) if vals else 0
-
-
-def _git_short(repo: Path) -> str:
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=str(repo), capture_output=True, text=True
-        ).stdout.strip()
-    except Exception:
-        return "unknown"
-
-
-def _git_branch(repo: Path) -> str:
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=str(repo), capture_output=True, text=True
-        ).stdout.strip()
-    except Exception:
-        return "unknown"

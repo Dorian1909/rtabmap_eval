@@ -3,55 +3,7 @@
 import os
 import signal
 import subprocess
-import time
 from pathlib import Path
-from typing import List
-
-
-def kill_processes(patterns: List[str], my_pid: int = None):
-    """Kill all processes matching any of the given pgrep patterns."""
-    if my_pid is None:
-        my_pid = os.getpid()
-    for pattern in patterns:
-        try:
-            result = subprocess.run(
-                ["pgrep", "-f", pattern],
-                capture_output=True, text=True
-            )
-            pids = [p for p in result.stdout.strip().split('\n')
-                    if p and p != str(my_pid)]
-            for pid in pids:
-                try:
-                    os.kill(int(pid), signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    pass
-        except Exception:
-            pass
-    time.sleep(2)
-
-
-def source_ros_cmd(build_dir: Path = None, ros_setup: Path = None) -> str:
-    """Return a shell snippet to source ROS2 + colcon workspace."""
-    if ros_setup is None:
-        ros_setup = Path("/opt/ros/humble/setup.bash")
-    cmd = f"source {ros_setup}"
-    if build_dir:
-        cmd += f" && source {build_dir}/install/setup.bash"
-    return cmd
-
-
-def build_colcon(build_dir: Path) -> bool:
-    """Run colcon build and return True on success."""
-    result = subprocess.run(
-        ["colcon", "build", "--symlink-install",
-         "--cmake-args", "-DCMAKE_BUILD_TYPE=Release"],
-        cwd=str(build_dir),
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        print(f"[BUILD FAILED]\n{result.stderr[-800:]}")
-        return False
-    return True
 
 
 def run_shell(cmd: str, env: dict = None, timeout: float = None,
@@ -72,22 +24,33 @@ def run_shell(cmd: str, env: dict = None, timeout: float = None,
 
 def launch_process(cmd: str, log_file: Path, env: dict = None,
                    cwd: str = None) -> subprocess.Popen:
-    """Start a background进程, redirecting stdout/stderr to log_file."""
+    """Start a background process, redirecting stdout/stderr to log_file.
+
+    The log file handle is attached to the returned Popen as `_log_fh` so
+    its lifetime is bound to the process — closing/terminating the process
+    releases the handle, avoiding fd leaks.
+    """
     run_env = os.environ.copy()
     if env:
         run_env.update(env)
-    return subprocess.Popen(
+    log_fh = open(log_file, "w")
+    proc = subprocess.Popen(
         ["bash", "-c", cmd],
         env=run_env,
-        stdout=open(log_file, "w"),
+        stdout=log_fh,
         stderr=subprocess.STDOUT,
         cwd=cwd,
         preexec_fn=os.setsid,
     )
+    proc._log_fh = log_fh  # keep the handle alive until proc is gone
+    return proc
 
 
 def terminate_process(proc: subprocess.Popen, timeout: float = 5):
-    """Gracefully terminate a process group, then kill if needed."""
+    """Gracefully terminate a process group, then kill if needed.
+
+    Also closes the log file handle attached by `launch_process`.
+    """
     try:
         pgid = os.getpgid(proc.pid)
         os.killpg(pgid, signal.SIGTERM)
@@ -99,3 +62,10 @@ def terminate_process(proc: subprocess.Popen, timeout: float = 5):
             pass
     except Exception:
         pass
+    finally:
+        log_fh = getattr(proc, "_log_fh", None)
+        if log_fh is not None and not log_fh.closed:
+            try:
+                log_fh.close()
+            except Exception:
+                pass

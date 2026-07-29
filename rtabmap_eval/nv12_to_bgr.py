@@ -12,7 +12,7 @@ class Nv12ToBgr(Node):
         super().__init__('nv12_to_bgr',
             automatically_declare_parameters_from_overrides=True)
         self.bridge = CvBridge()
-        self.pub = self.create_publisher(Image, '/StereoNetNode/rectified_image_bgr', 10)
+        self.pub = self.create_publisher(Image, '/image_left_raw_rgb', 10)
         self.sub = self.create_subscription(
             Image, '/StereoNetNode/rectify_left_image',
             self.callback, 10)

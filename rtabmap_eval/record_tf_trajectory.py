@@ -2,13 +2,12 @@
 """
 Record TF map->base_footprint as TUM trajectory while RTAB-Map is running.
 
-Usage:
-    python3 /home/dpx/record_tf_trajectory.py [output_path] [rate_hz]
+Launched as a ROS2 Node by eval.launch.py. Output path and rate are passed
+via ROS parameters `output_path` and `rate_hz`.
 
 Output: TUM format file (timestamp x y z qx qy qz qw)
 """
 
-import sys
 import os
 import signal
 import rclpy
@@ -18,15 +17,18 @@ from collections import deque
 
 
 class TfRecorder(Node):
-    def __init__(self, output_path, rate_hz=20.0):
+    def __init__(self):
         super().__init__('tf_recorder')
-        self.output_path = output_path
+        self.declare_parameter('output_path', '/tmp/tf_trajectory.tum')
+        self.declare_parameter('rate_hz', 20.0)
+        self.output_path = self.get_parameter('output_path').value
+        rate_hz = float(self.get_parameter('rate_hz').value)
         self.poses = deque()
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.create_timer(1.0 / rate_hz, self.record_pose)
         self.get_logger().info(
-            f'Recording map->base_footprint at {rate_hz}Hz -> {output_path}')
+            f'Recording map->base_footprint at {rate_hz}Hz -> {self.output_path}')
 
     def record_pose(self):
         try:
@@ -50,11 +52,8 @@ class TfRecorder(Node):
 
 
 def main():
-    output_path = sys.argv[1] if len(sys.argv) > 1 else '/tmp/tf_trajectory.tum'
-    rate_hz = float(sys.argv[2]) if len(sys.argv) > 2 else 20.0
-
     rclpy.init()
-    node = TfRecorder(output_path, rate_hz)
+    node = TfRecorder()
 
     def shutdown(sig, frame):
         node.save()

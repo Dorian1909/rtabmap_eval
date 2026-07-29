@@ -4,7 +4,7 @@ RTAB-Map SLAM 的独立基准评测平台。自动完成编译、运行、评测
 
 ## 功能特点
 
-- **全流程自动化**：编译 → 启动 → 播包 → 录制轨迹 → 评测，一键完成
+- **全流程自动化**：启动 → 播包 → 录制轨迹 → 评测，一键完成
 - **多数据集多次运行**：支持 11 个数据集 × N 次重复运行，统计均值和稳定性
 - **APE + RPE 指标**：全局精度和局部漂移，平移和旋转分别评估
 - **跨平台**：x86_64 / ARM64 通用，支持 humble、jazzy、rolling 等任意 ROS2 发行版
@@ -15,18 +15,26 @@ RTAB-Map SLAM 的独立基准评测平台。自动完成编译、运行、评测
 ## 快速开始
 
 ```bash
-# 1. 克隆
+# 1. 克隆到 colcon workspace 的 src/ 下
+cd <your_colcon_ws>/src
 git clone https://github.com/D-Robotics/rtabmap_eval.git
-cd rtabmap_eval
 
 # 2. 安装 Python 依赖
-pip3 install -r requirements.txt
+pip3 install -r rtabmap_eval/requirements.txt
 
-# 3. 配置路径（首次使用）
-cp configs/default.yaml configs/user.yaml
-# 编辑 configs/user.yaml，填写你的 rtabmap 源码路径、编译路径、bag 路径、真值路径
+# 3. colcon 编译
+cd <your_colcon_ws>
+colcon build --packages-select rtabmap_eval
 
-# 4. 全量评测（11 bags × 3 runs ≈ 100 分钟）
+# 4. 配置路径（首次使用）
+cp src/rtabmap_eval/configs/default.yaml src/rtabmap_eval/configs/user.yaml
+# 编辑 user.yaml，填写 bag 路径、真值路径
+
+# 5. source ROS2 与本 workspace（每次新终端）
+source /opt/ros/<distro>/setup.bash
+source <your_colcon_ws>/install/setup.bash
+
+# 6. 全量评测（11 bags × 3 runs ≈ 100 分钟）
 python3 -m rtabmap_eval
 
 # 或快速验证（1 bag × 1 run ≈ 3 分钟）
@@ -40,19 +48,10 @@ python3 -m rtabmap_eval --quick
 ### 最小 user.yaml 示例
 
 ```yaml
-rtabmap:
-  source_dir: /home/user/rtabmap
-  build_dir: /home/user/catkin_ws
-  db_path: ~/.ros/rtabmap.db
-
-ros:
-  distro: jazzy                # 你的 ROS2 发行版
-
 paths:
   bag_dir: /data/bags
   gt_dir: /data/ground_truth
-  launch_file: scripts/example.launch.py
-  record_script: scripts/record_tf_trajectory.py
+  launch_cmd: ros2 launch rtabmap.launch.py
 
 bag_mapping:
   bag_20260527_160436: "05271604"
@@ -64,16 +63,10 @@ bag_mapping:
 
 | 分组 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `ros` | `distro` | string | `humble` | ROS2 发行版名称 |
-| `ros` | `setup_bash` | path | 自动推导 | 手动指定 setup.bash 路径（不填则根据 distro 自动生成） |
-| `rtabmap` | `source_dir` | path | 必填 | RTAB-Map 源码路径（包含 corelib/） |
-| `rtabmap` | `ros_source_dir` | path | 自动推导 | rtabmap_ros 源码路径（不填则自动推导） |
-| `rtabmap` | `build_dir` | path | 必填 | colcon 工作空间根目录（包含 install/ 和 build/） |
-| `rtabmap` | `db_path` | path | `~/.ros/rtabmap.db` | RTAB-Map 数据库文件（`--clean` 时删除） |
+| *(顶层)* | `db_path` | path | `~/.ros/rtabmap.db` | RTAB-Map 数据库路径,`--clean` 时删除 |
 | `paths` | `bag_dir` | path | 必填 | 存放 bag 子目录的根目录 |
 | `paths` | `gt_dir` | path | 必填 | 存放 `_gt.tum` 真值文件的根目录 |
-| `paths` | `launch_file` | path | 必填 | ROS2 launch 文件（支持相对路径） |
-| `paths` | `record_script` | path | 必填 | TF→TUM 轨迹录制脚本（支持相对路径） |
+| `paths` | `launch_cmd` | string | 必填 | 用户 RTAB-Map 启动命令行（支持传任意 launch 参数） |
 | `bag_mapping` | *(键值对)* | string | 必填 | bag 文件夹名 → 真值文件前缀的映射 |
 | `eval` | `runs_per_bag` | int | `3` | 每个 bag 重复运行次数 |
 | `eval` | `startup_wait_s` | float | `10` | 启动后等待 RTAB-Map 就绪的秒数 |
@@ -83,8 +76,17 @@ bag_mapping:
 | `evo` | `t_max_diff` | float | `0.5` | 轨迹对齐时允许的最大时间戳差 |
 | `evo` | `rpe_delta` | int | `1` | RPE 计算的帧间隔 |
 | `evo` | `rpe_delta_unit` | enum | `f` | RPE 帧间隔单位：`f`=帧, `d`=距离, `r`=旋转圈数, `m`=分钟 |
-| `kill_patterns` | | list | [...] | 每次运行前后需要清理的进程名模式 |
 | `env` | | dict | {...} | 环境变量覆盖（OpenGL 无头渲染等） |
+| `eval_launch` | `static_tf.*` | dict | 见下 | 静态 TF 值（x/y/z/roll/pitch/yaw/parent/child） |
+| `eval_launch` | `enable_static_tf` | bool | `true` | 是否发布静态 TF |
+| `eval_launch` | `enable_nv12_to_bgr` | bool | `true` | 启动 NV12→BGR8 转换 |
+| `eval_launch` | `enable_odom_to_tf` | bool | `true` | 启动 odom→TF 转换 |
+| `eval_launch` | `enable_foxglove` | bool | `true` | 启动 Foxglove bridge |
+| `eval_launch` | `enable_rviz` | bool | `false` | 启动 RViz |
+| `eval_launch` | `enable_rtabmap_viz` | bool | `false` | 启动 RTAB-Map GUI |
+| `eval_launch` | `bag_start_delay_s` | float | `3.0` | bag 播放延迟启动时间（s） |
+
+> 使用前请自行 `source` ROS2 环境（`/opt/ros/<distro>/setup.bash`）与 colcon 工作空间（`<ws>/install/setup.bash`）。
 
 ## 评测指标
 
@@ -117,52 +119,69 @@ bag_mapping:
 
 ## 内置脚本
 
-`scripts/` 目录包含运行评测所需的全部辅助脚本，配置文件中通过相对路径引用，评测时自动调用。
+本工具的所有 Node 与 launch 文件在 `colcon build` 后通过 ament 索引按 package 名调用，无需手动指定路径。
 
-### `scripts/record_tf_trajectory.py`
+### `record_tf_trajectory.py`(包内)
 
 录制 `map → base_footprint` TF 变换为 TUM 格式轨迹文件。这是 SLAM 的估计路径——每次运行的核心输出。
 
-**工作原理**：以可配置频率（默认 20 Hz）订阅 TF 树，缓存所有位姿，收到 SIGTERM/SIGINT 时写入磁盘。评测运行器与 RTAB-Map 同时启动此脚本，bag 播放结束后停止。
+**工作原理**：以可配置频率（默认 20 Hz）订阅 TF 树，缓存所有位姿，收到 SIGTERM/SIGINT 时写入磁盘。作为 ROS2 Node(`rtabmap_eval` 包的 `record_tf_trajectory` entry point)在 `eval.launch.py` 中启动,通过 ROS 参数 `output_path` 与 `rate_hz` 传入输出路径与录制频率。
+
+**单独使用**(需先 `colcon build` 并 `source install/setup.bash`):
+```bash
+ros2 run rtabmap_eval record_tf_trajectory --ros-args -p output_path:=/tmp/traj.tum -p rate_hz:=20.0
+```
+
+### `odom_to_tf.py`
+
+从 `/odom` 话题发布 `odom → base_footprint` TF。当里程计源发布 `nav_msgs/Odometry` 但不发布 TF 时需要此脚本（例如某些轮式里程计驱动）。在 `eval.launch.py` 中启动。
 
 **单独使用：**
 ```bash
-python3 scripts/record_tf_trajectory.py [输出文件.tum] [频率Hz]
+ros2 run rtabmap_eval odom_to_tf
 ```
 
-### `scripts/odom_to_tf.py`
+### `nv12_to_bgr.py`
 
-从 `/odom` 话题发布 `odom → base_footprint` TF。当里程计源发布 `nav_msgs/Odometry` 但不发布 TF 时需要此脚本（例如某些轮式里程计驱动）。
+将 NV12 编码图像转换为 BGR8 供 RTAB-Map 使用。仅当相机驱动发布 NV12 格式时需要（常见于带硬件编码器的嵌入式平台）。如果相机已发布 BGR8/RGB8，则不需要此脚本。在 `eval.launch.py` 中启动。
 
 **单独使用：**
 ```bash
-python3 scripts/odom_to_tf.py
+ros2 run rtabmap_eval nv12_to_bgr
 ```
 
-### `scripts/nv12_to_bgr.py`
+### `launch/eval.launch.py`
 
-将 NV12 编码图像转换为 BGR8 供 RTAB-Map 使用。仅当相机驱动发布 NV12 格式时需要（常见于带硬件编码器的嵌入式平台）。如果相机已发布 BGR8/RGB8，则不需要此脚本。
+eval 侧 launch 文件,承载所有辅助进程与 bag 播放。由 eval 项目内部通过 ament 索引按 package 名调用(`runner.py` 解析 `share/rtabmap_eval/launch/eval.launch.py`),用户无需在配置中指定 launch 文件路径。每次 run 启动一次,bag 播放结束后自动退出,所有子进程由 ROS2 launch 框架清理。
 
-**单独使用：**
-```bash
-python3 scripts/nv12_to_bgr.py
+runner 自动追加 `bag_path`/`traj_file`/`record_rate` 三个 launch 参数,并把 yaml 中 `eval_launch` section 的字段扁平化后追加(如 `static_tf_x:=0.0`、`enable_nv12_to_bgr:=true`),用户可在 user.yaml 中按机器人定制。
+
+**包含的进程**(均可通过 `eval_launch` 配置开关):
+- `nv12_to_bgr.py` — NV12 → BGR8 图像转换(`enable_nv12_to_bgr`)
+- `odom_to_tf.py` — `/odom` → `odom→base_footprint` TF(`enable_odom_to_tf`)
+- `static_transform_publisher` — 可配置的静态 TF(`enable_static_tf` + `static_tf.*`)
+- `record_tf_trajectory` — TF 录制为 TUM 轨迹(始终启动)
+- `foxglove_bridge` — Web 可视化(`enable_foxglove`,默认开)
+- `rtabmap_viz` — RTAB-Map GUI(`enable_rtabmap_viz`,默认关)
+- `rviz2` — RViz(`enable_rviz`,默认关)
+- `ros2 bag play` — 延迟启动(`bag_start_delay_s`),播完触发整个 launch 退出
+
+**定制示例**(user.yaml):
+```yaml
+eval_launch:
+  static_tf:
+    x: 0.1
+    y: 0
+    z: 0.2
+    roll: 0
+    pitch: 0
+    yaw: 0
+    parent: base_link
+    child: camera_link
+  enable_nv12_to_bgr: false   # 相机已发 BGR8
+  enable_odom_to_tf: false   # 驱动已发 TF
+  enable_rviz: true
 ```
-
-### `scripts/rtabmap_xfeat_matcher.py`
-
-XFeat 描述子匹配器，用于 RTAB-Map 的 `PyMatcher` 接口。实现了互最近邻（MNN）匹配 + 余弦相似度阈值（0.82），与 XFeat 原生 `match()` 方法逻辑一致。
-
-**使用场景**：设置 `Vis/CorNNType=0`（PyMatcher）代替内置 C++ 匹配器（CorNNType=9）时使用。
-
-### `scripts/example.launch.py`
-
-示例 ROS2 launch 文件，展示评测的完整启动配置。复制并修改此文件适配你的机器人——修改话题重映射、TF 变换、RTAB-Map 参数等。
-
-需要自定义的关键部分：
-- **话题重映射** — 匹配你 bag 中的 RGB、depth、camera_info、odom 话题
-- **静态 TF** — 调整 `base_footprint → camera_depth_frame` 变换
-- **RTAB-Map 参数** — 特征类型、PnP 设置、回环配置
-- **辅助脚本** — 按需包含 `odom_to_tf.py` 和 `nv12_to_bgr.py`
 
 ## 输出说明
 
@@ -177,8 +196,8 @@ rtabmap_benchmark_20260608_115040/
   bag_20260527_160436/
     run_1/
       trajectory.tum                           # SLAM 输出轨迹
-      rtabmap.log                              # RTAB-Map 完整控制台日志
-      tf_recorder.log                          # TF 录制器日志
+      rtabmap.log                              # RTAB-Map launch 日志
+      eval.log                                 # eval launch 日志（辅助进程 + 播包）
     run_2/
       ...
     run_3/
@@ -214,9 +233,6 @@ RTAB-Map 评测平台
 数据集数量:  11
 每数据集运行: 3 次
 输出目录:    /tmp/rtabmap_benchmark_20260608_143022
-
-[BUILD] 编译 RTAB-Map...
-[BUILD] 完成.
 
 [1/33] bag_20260527_160436 — 第 1/3 次
   播放 bag_20260527_160436 (第 1 次)...
@@ -259,9 +275,6 @@ APE 范围                         0.3142 ~ 0.4015
   "bags": ["bag_20260527_160436"],
   "num_runs": 1,
   "clean_db": false,
-  "skip_build": true,
-  "git_commit": "a48710d5",
-  "git_branch": "feature/xfeat-pydetector",
   "config": { ... }
 }
 ```
@@ -276,7 +289,6 @@ python3 -m rtabmap_eval [选项]
   --bags "b1,b2"     逗号分隔的 bag 名称（默认: 所有配置中的 bag）
   --runs N            每个 bag 的重复运行次数（默认: 从配置读取，通常 3）
   --quick             快速模式：1 个 bag × 1 次运行
-  --skip-build        跳过 colcon 编译步骤
   --clean             每次运行前删除 rtabmap.db
   --output 目录       指定结果输出目录
   -h, --help          显示帮助信息
@@ -285,11 +297,11 @@ python3 -m rtabmap_eval [选项]
 ### 使用示例
 
 ```bash
-# 全量评测（全新编译 + 清理数据库）
+# 全量评测（清理数据库）
 python3 -m rtabmap_eval --clean
 
 # 快速验证
-python3 -m rtabmap_eval --quick --skip-build
+python3 -m rtabmap_eval --quick
 
 # 指定数据集，重复 5 次
 python3 -m rtabmap_eval --bags "bag_20260527_160436,bag_20260527_164443" --runs 5
@@ -309,38 +321,40 @@ python3 -m rtabmap_eval.eval_only /tmp/rtabmap_benchmark_xxx/trajectory.tum --gt
 | x86_64 (Ubuntu 24.04) | Jazzy | 兼容 |
 | ARM64 / aarch64 | Humble / Jazzy | 兼容 |
 
-无架构相关代码，纯 Python + ROS2 CLI + evo。在 YAML 配置中设置 `ros.distro` 为你的发行版即可。
+无架构相关代码，纯 Python + ROS2 CLI + evo。使用前请自行 `source` 对应 ROS2 发行版与 colcon workspace。
 
 ## 项目结构
 
 ```
-rtabmap_eval/
-  rtabmap_eval/           Python 包
+rtabmap_eval/                  ROS2 ament_python package
+  rtabmap_eval/                Python 包
     __init__.py
-    __main__.py           CLI 入口
-    config.py             YAML 配置加载与验证
-    runner.py             SLAM 执行（编译、启动、播包、录制）
-    evaluator.py          轨迹评测（APE, RPE via evo）
-    benchmark.py          编排与报表
-    utils.py              进程管理、Shell 工具
-    eval_only.py          独立评测已有轨迹
-  scripts/                辅助脚本（从配置文件引用）
-    record_tf_trajectory.py   录制 map→base_footprint 为 TUM 轨迹
-    odom_to_tf.py             从 /odom 发布 odom→base_footprint TF
-    nv12_to_bgr.py            NV12 图像转 BGR8（嵌入式平台可选）
-    rtabmap_xfeat_matcher.py  XFeat MNN 匹配器（PyMatcher 接口）
-    example.launch.py         示例 launch 文件（复制修改）
+    __main__.py                CLI 入口
+    config.py                  YAML 配置加载与验证
+    runner.py                  SLAM 执行（启动、播包、录制）
+    evaluator.py               轨迹评测（APE, RPE via evo）
+    benchmark.py               编排与报表
+    utils.py                   进程管理、Shell 工具
+    record_tf_trajectory.py    TF 录制为 TUM 轨迹（ROS Node entry point）
+    odom_to_tf.py              从 /odom 发布 TF（ROS Node entry point）
+    nv12_to_bgr.py             NV12 转 BGR8（ROS Node entry point）
+    eval_only.py               独立评测已有轨迹
+  launch/
+    eval.launch.py             eval 侧 launch（辅助进程 + TF 录制 + 播包）
   configs/
-    default.yaml          默认配置（所有字段均有文档）
-  requirements.txt        evo, pyyaml
-  setup.py                pip install -e .
+    default.yaml               默认配置（所有字段均有文档）
+  resource/rtabmap_eval        ament package 注册占位
+  requirements.txt             evo, pyyaml
+  package.xml                  ROS2 package 声明
+  setup.py                     ament_python 安装脚本
+  setup.cfg                    ament_python 脚本安装配置
   README.md
 ```
 
 ## 依赖
 
-- **ROS2** Humble 或更高版本（colcon, ros2 CLI）
+- **ROS2** Humble 或更高版本（colcon, ros2 CLI）— 使用前请自行 `source` ROS2 与 colcon workspace
 - **Python 3.8+**
 - **evo** `>=1.30.0` — 轨迹评测（`pip install evo`）
 - **PyYAML** — 配置加载（`pip install pyyaml`）
-- RTAB-Map 已在 colcon 工作空间中编译完成
+- RTAB-Map 已在 colcon 工作空间中编译完成（本工具不负责编译）

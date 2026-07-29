@@ -18,7 +18,7 @@ Examples:
   python3 -m rtabmap_eval --quick                   # Quick test (1 bag × 1 run)
   python3 -m rtabmap_eval --bags "bag1,bag2" --runs 5
   python3 -m rtabmap_eval --config my_config.yaml
-  python3 -m rtabmap_eval --skip-build --clean
+  python3 -m rtabmap_eval --clean
         """,
     )
     parser.add_argument("--config", type=str, default=None,
@@ -29,8 +29,6 @@ Examples:
                         help="Number of runs per bag (default: from config, usually 3)")
     parser.add_argument("--quick", action="store_true",
                         help="Quick mode: single bag, single run")
-    parser.add_argument("--skip-build", action="store_true",
-                        help="Skip colcon build step")
     parser.add_argument("--clean", action="store_true",
                         help="Delete rtabmap.db before each run")
     parser.add_argument("--output", type=str, default=None,
@@ -67,7 +65,7 @@ Examples:
         sys.exit(1)
 
     output_dir = Path(args.output) if args.output else None
-    run_benchmark(cfg, valid, num_runs, args.skip_build, args.clean, output_dir)
+    run_benchmark(cfg, valid, num_runs, args.clean, output_dir)
 
 
 if __name__ == "__main__":
