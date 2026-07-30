@@ -7,7 +7,24 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 
-DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "configs" / "default.yaml"
+def _find_default_config() -> Path:
+    """Locate configs/default.yaml.
+
+    Prefers the colcon-installed share directory; falls back to the
+    source tree (editable install / running from repo).
+    """
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        share = Path(get_package_share_directory('rtabmap_eval'))
+        candidate = share / 'configs' / 'default.yaml'
+        if candidate.exists():
+            return candidate
+    except Exception:
+        pass
+    return Path(__file__).parent.parent / "configs" / "default.yaml"
+
+
+DEFAULT_CONFIG_PATH = _find_default_config()
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -53,51 +70,25 @@ class Config:
 
     def validate(self):
         """Validate required fields exist and paths make sense."""
-        required_sections = ["rtabmap", "paths", "bag_mapping", "eval"]
+        required_sections = ["paths", "bag_mapping", "eval"]
         for section in required_sections:
             if section not in self._data:
                 raise ValueError(f"Missing required config section: {section}")
 
-        rtabmap = self._data["rtabmap"]
-        for key in ["source_dir", "build_dir"]:
-            if key not in rtabmap:
-                raise ValueError(f"Missing rtabmap.{key} in config")
-
         paths = self._data["paths"]
-        for key in ["bag_dir", "gt_dir", "launch_file", "record_script"]:
+        for key in ["bag_dir", "gt_dir", "launch_cmd"]:
             if key not in paths:
                 raise ValueError(f"Missing paths.{key} in config")
+        if str(paths["launch_cmd"]).strip() in ("", "REPLACE_ME"):
+            raise ValueError(
+                "paths.launch_cmd must be set to a real launch command "
+                "(e.g. 'ros2 launch /abs/path/to/your.launch.py') in user.yaml")
 
     # --- Convenience accessors ---
 
     @property
-    def ros_distro(self) -> str:
-        return str(self._data.get("ros", {}).get("distro", "humble"))
-
-    @property
-    def ros_setup_bash(self) -> Path:
-        """Path to ROS2 setup.bash, auto-detected from distro if not configured."""
-        explicit = self._data.get("ros", {}).get("setup_bash")
-        if explicit:
-            return Path(explicit)
-        return Path(f"/opt/ros/{self.ros_distro}/setup.bash")
-
-    @property
-    def rtabmap_source(self) -> Path:
-        return Path(self._data["rtabmap"]["source_dir"])
-
-    @property
-    def rtabmap_ros_source(self) -> Path:
-        return Path(self._data["rtabmap"].get("ros_source_dir",
-                   str(self.rtabmap_source / ".." / "catkin_ws" / "src" / "rtabmap")))
-
-    @property
-    def build_dir(self) -> Path:
-        return Path(self._data["rtabmap"]["build_dir"])
-
-    @property
     def db_path(self) -> Path:
-        p = self._data["rtabmap"].get("db_path", "~/.ros/rtabmap.db")
+        p = self._data.get("db_path", "~/.ros/rtabmap.db")
         return Path(p).expanduser()
 
     @property
@@ -109,18 +100,8 @@ class Config:
         return Path(self._data["paths"]["gt_dir"])
 
     @property
-    def launch_file(self) -> Path:
-        p = Path(self._data["paths"]["launch_file"])
-        if not p.is_absolute():
-            p = self._repo_root / p
-        return p
-
-    @property
-    def record_script(self) -> Path:
-        p = Path(self._data["paths"]["record_script"])
-        if not p.is_absolute():
-            p = self._repo_root / p
-        return p
+    def launch_cmd(self) -> str:
+        return str(self._data["paths"]["launch_cmd"])
 
     @property
     def bag_mapping(self) -> Dict[str, str]:
@@ -159,12 +140,27 @@ class Config:
         return str(self._data.get("evo", {}).get("rpe_delta_unit", "f"))
 
     @property
-    def kill_patterns(self) -> List[str]:
-        return self._data.get("kill_patterns", [])
-
-    @property
     def env_overrides(self) -> Dict[str, str]:
         return self._data.get("env", {})
+
+    def eval_launch_args(self) -> Dict[str, str]:
+        """Flatten eval_launch section into a dict of launch arguments.
+
+        Nested `static_tf` is flattened as `static_tf_<key>`.
+        Used by runner to append `key:=value` pairs to the eval launch command.
+        """
+        section = self._data.get("eval_launch", {}) or {}
+        args: Dict[str, str] = {}
+        for k, v in section.items():
+            if isinstance(v, dict):
+                for sub_k, sub_v in v.items():
+                    args[f"{k}_{sub_k}"] = str(sub_v)
+            else:
+                if isinstance(v, bool):
+                    args[k] = "true" if v else "false"
+                else:
+                    args[k] = str(v)
+        return args
 
     def get_gt_file(self, bag_name: str) -> Optional[Path]:
         prefix = self.bag_mapping.get(bag_name)
@@ -172,15 +168,6 @@ class Config:
             return None
         gt_file = self.gt_dir / f"{prefix}_gt.tum"
         return gt_file if gt_file.exists() else None
-
-    def get_ros_source_cmd(self) -> str:
-        """Return shell snippet to source ROS2 and the colcon workspace."""
-        build = self.build_dir
-        setup = self.ros_setup_bash
-        return (
-            f"source {setup} && "
-            f"source {build}/install/setup.bash"
-        )
 
     def to_dict(self) -> dict:
         return self._data.copy()
