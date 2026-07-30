@@ -128,6 +128,22 @@ class Config:
         return float(self._data["eval"]["playback_timeout_s"])
 
     @property
+    def validity_min_poses(self) -> int:
+        return int(self._data.get("eval", {}).get("validity", {}).get("min_poses", 10))
+
+    @property
+    def validity_min_coverage(self) -> float:
+        return float(self._data.get("eval", {}).get("validity", {}).get("min_coverage", 0.5))
+
+    @property
+    def validity_min_extent_m(self) -> float:
+        return float(self._data.get("eval", {}).get("validity", {}).get("min_extent_m", 0.05))
+
+    @property
+    def validity_span_tolerance_s(self) -> float:
+        return float(self._data.get("eval", {}).get("validity", {}).get("span_tolerance_s", 2.0))
+
+    @property
     def evo_t_max_diff(self) -> float:
         return float(self._data.get("evo", {}).get("t_max_diff", 0.5))
 

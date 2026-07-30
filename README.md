@@ -308,9 +308,6 @@ python3 -m rtabmap_eval --bags "bag_20260527_160436,bag_20260527_164443" --runs 
 
 # 使用不同机器人配置
 python3 -m rtabmap_eval --config configs/robot_b.yaml
-
-# 仅评估已有的轨迹文件（跳过 SLAM 运行）
-python3 -m rtabmap_eval.eval_only /tmp/rtabmap_benchmark_xxx/trajectory.tum --gt /path/to/gt.tum
 ```
 
 ## 平台兼容性
@@ -338,7 +335,6 @@ rtabmap_eval/                  ROS2 ament_python package
     record_tf_trajectory.py    TF 录制为 TUM 轨迹（ROS Node entry point）
     odom_to_tf.py              从 /odom 发布 TF（ROS Node entry point）
     nv12_to_bgr.py             NV12 转 BGR8（ROS Node entry point）
-    eval_only.py               独立评测已有轨迹
   launch/
     eval.launch.py             eval 侧 launch（辅助进程 + TF 录制 + 播包）
   configs/

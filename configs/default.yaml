@@ -57,6 +57,25 @@ eval:
   # Maximum wall-clock seconds per bag playback (safety timeout)
   playback_timeout_s: 600
 
+  # --- Trajectory validity checks (reject degenerate SLAM output) ---
+  # Detects failed runs where a broken TF leaves RTAB-Map emitting a useless
+  # trajectory (stationary jitter, truncated span) that evo would otherwise
+  # still score as a valid result. Any single check failing marks the run failed.
+  validity:
+    # Reject trajectories with fewer than this many poses.
+    min_poses: 10
+    # Reject trajectories whose time span covers less than this fraction of the
+    # expected duration (bag metadata duration, falling back to GT span).
+    # Set to 0.0 to disable the span check.
+    min_coverage: 0.5
+    # Reject trajectories whose translational extent (max-min of x, y, z) is
+    # below this threshold in meters. Catches "robot never moved".
+    # Set to 0.0 to disable.
+    min_extent_m: 0.05
+    # Extra slack (seconds) when comparing trajectory span to expected duration,
+    # absorbing startup/shutdown trimming.
+    span_tolerance_s: 2.0
+
 # ============================================================
 # eval.launch.py configuration (robot-specific)
 # These fields are passed as launch arguments to eval.launch.py.

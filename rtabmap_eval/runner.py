@@ -3,7 +3,9 @@
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
+
+import yaml
 
 from .config import Config
 from .utils import (
@@ -44,6 +46,102 @@ def _find_eval_launch() -> Optional[Path]:
 
 
 _EVAL_LAUNCH = _find_eval_launch()
+
+
+def _bag_duration_seconds(bag_dir: Path) -> Optional[float]:
+    """Return bag duration in seconds from metadata.yaml, or None if unavailable."""
+    meta = bag_dir / "metadata.yaml"
+    if not meta.exists():
+        return None
+    try:
+        data = yaml.safe_load(meta.read_text())
+        ns = data["rosbag2_bagfile_information"]["duration"]["nanoseconds"]
+        return float(ns) * 1e-9
+    except Exception:
+        return None
+
+
+def _gt_duration_seconds(gt_file: Path) -> Optional[float]:
+    """Return GT trajectory time span (last - first timestamp) in seconds, or None."""
+    try:
+        lines = gt_file.read_text().strip().split('\n')
+        if len(lines) < 2:
+            return None
+        t0 = float(lines[0].split()[0])
+        t1 = float(lines[-1].split()[0])
+        span = abs(t1 - t0)
+        return span if span > 0 else None
+    except Exception:
+        return None
+
+
+def _validate_trajectory(
+    traj_file: Path,
+    cfg: Config,
+    bag_dir: Path,
+    gt_file: Optional[Path],
+) -> Tuple[bool, str, int]:
+    """
+    Reject degenerate SLAM output (broken TF, truncated/stationary trajectory).
+
+    Returns (ok, reason, n_poses). When ok is False, reason is a human-readable
+    string for the log line; when ok is True, reason is empty.
+    """
+    ts: List[float] = []
+    xs: List[float] = []
+    ys: List[float] = []
+    zs: List[float] = []
+    try:
+        lines = traj_file.read_text().strip().split('\n')
+    except Exception:
+        return False, "trajectory file unreadable", 0
+
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 8:
+            continue
+        try:
+            ts.append(float(parts[0]))
+            xs.append(float(parts[1]))
+            ys.append(float(parts[2]))
+            zs.append(float(parts[3]))
+        except ValueError:
+            continue
+
+    n = len(ts)
+    if n == 0:
+        return False, "no parseable poses", 0
+
+    # 1. Pose count
+    min_poses = cfg.validity_min_poses
+    if min_poses > 0 and n < min_poses:
+        return False, f"only {n} poses (min {min_poses})", n
+
+    # 2. Time coverage
+    min_cov = cfg.validity_min_coverage
+    if min_cov > 0:
+        traj_span = max(ts) - min(ts)
+        expected = _bag_duration_seconds(bag_dir)
+        if expected is None and gt_file is not None:
+            expected = _gt_duration_seconds(gt_file)
+        if expected and expected > 0:
+            required = expected * min_cov - cfg.validity_span_tolerance_s
+            if traj_span < required:
+                pct = traj_span / expected * 100
+                return (False,
+                        f"covers {traj_span:.1f}s of {expected:.1f}s "
+                        f"({pct:.0f}%, need {min_cov*100:.0f}%)", n)
+
+    # 3. Stationary / extent
+    min_extent = cfg.validity_min_extent_m
+    if min_extent > 0:
+        extent = max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+        if extent < min_extent:
+            return (False,
+                    f"stationary, extent {extent*1000:.1f}mm < "
+                    f"{min_extent*1000:.1f}mm", n)
+
+    return True, "", n
 
 
 def run_single_bag(cfg: Config, bag_name: str, run_idx: int,
@@ -136,6 +234,10 @@ def run_single_bag(cfg: Config, bag_name: str, run_idx: int,
         print(f"  [ERROR] Empty trajectory: {traj_file}")
         return None
 
-    lines = traj_file.read_text().strip().split('\n')
-    print(f"  Trajectory: {len(lines)} poses saved")
+    ok, reason, n_poses = _validate_trajectory(traj_file, cfg, bag_dir, gt_file)
+    if not ok:
+        print(f"  [FAIL] trajectory degenerate: {reason}")
+        return None
+
+    print(f"  Trajectory: {n_poses} poses saved")
     return traj_file
